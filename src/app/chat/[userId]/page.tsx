@@ -57,13 +57,15 @@ export default function ChatPage() {
       await loadMessages(data.user.id)
       scrollToBottom()
 
-      // Subscribe to realtime
+      // Subscribe to realtime - use a unique channel name for this conversation
+      const channelLabel = `chat:${data.user.id}:${otherId}`
       const channel = supabase
-        .channel('messages-channel')
+        .channel(channelLabel)
         .on('postgres_changes', {
           event: 'INSERT', schema: 'public', table: 'messages',
         }, (payload: RealtimePostgresInsertPayload<Message>) => {
           const msg = payload.new
+          // Check if message belongs to this conversation
           if (
             (msg.sender_id === data.user!.id && msg.receiver_id === otherId) ||
             (msg.sender_id === otherId && msg.receiver_id === data.user!.id)
@@ -94,10 +96,16 @@ export default function ChatPage() {
     
     if (!error && newMsg) {
       setText('')
-      // Message will be appended via the Realtime listener
+      // Optimistically add the message to the state
+      setMessages(prev => {
+        if (prev.some(m => m.id === newMsg.id)) return prev
+        setTimeout(scrollToBottom, 100)
+        return [...prev, newMsg]
+      })
     }
     setSending(false)
   }
+
 
   const formatTime = (ts: string) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
